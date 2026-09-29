@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Transaction, Category, TransactionType } from '@/lib/types';
-import { X, ArrowUpRight, ArrowDownLeft, Check } from 'lucide-react';
+import { validateTransactionInput } from '@/lib/financial';
+import { X, ArrowUpRight, ArrowDownLeft, Check, AlertCircle } from 'lucide-react';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -30,7 +31,13 @@ export default function TransactionModal({
   useEffect(() => {
     if (editingTransaction) {
       setType(editingTransaction.type);
-      setAmount(String(editingTransaction.amount));
+      // Format amount with appropriate sign
+      const rawNum = Number(editingTransaction.amount);
+      if (editingTransaction.type === 'expense') {
+        setAmount(String(rawNum > 0 ? -rawNum : rawNum));
+      } else {
+        setAmount(String(rawNum < 0 ? -rawNum : rawNum));
+      }
       setCategoryId(editingTransaction.category_id);
       setDate(editingTransaction.date);
       setDescription(editingTransaction.description);
@@ -41,16 +48,30 @@ export default function TransactionModal({
       setDate(new Date().toISOString().split('T')[0]);
       setDescription('');
       setNotes('');
-      // Set first matching category
       const firstCat = categories.find((c) => c.type === 'expense');
       setCategoryId(firstCat ? firstCat.id : '');
     }
     setError('');
   }, [editingTransaction, isOpen, categories]);
 
-  // Update default category if type switches and current category type doesn't match
+  // Handle type change with automatic sign adjustment (Option A: Signed convention)
   const handleTypeChange = (newType: TransactionType) => {
     setType(newType);
+    setError('');
+
+    // Adjust sign of existing amount when toggling
+    if (amount.trim() !== '') {
+      const clean = amount.trim().replace(',', '.');
+      const num = Number(clean);
+      if (!isNaN(num) && num !== 0) {
+        if (newType === 'expense' && num > 0) {
+          setAmount(`-${clean}`);
+        } else if (newType === 'income' && num < 0) {
+          setAmount(clean.replace('-', ''));
+        }
+      }
+    }
+
     const available = categories.filter((c) => c.type === newType);
     if (available.length > 0) {
       setCategoryId(available[0].id);
@@ -61,11 +82,14 @@ export default function TransactionModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsedAmount = parseFloat(amount.replace(',', '.'));
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      setError('Por favor, informe um valor válido maior que zero.');
+
+    // Validate financial input according to signed convention rules
+    const validation = validateTransactionInput(amount, type);
+    if (!validation.valid || !validation.amount) {
+      setError(validation.error || 'Valor inválido.');
       return;
     }
+
     if (!description.trim()) {
       setError('A descrição é obrigatória.');
       return;
@@ -78,7 +102,7 @@ export default function TransactionModal({
     onSave(
       {
         type,
-        amount: parsedAmount,
+        amount: validation.amount.toNumber(),
         category_id: categoryId,
         date: date || new Date().toISOString().split('T')[0],
         description: description.trim(),
@@ -121,8 +145,12 @@ export default function TransactionModal({
               borderRadius: 'var(--radius-sm)',
               fontSize: '0.85rem',
               marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
             }}>
-              {error}
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
+              <span>{error}</span>
             </div>
           )}
 
@@ -156,7 +184,7 @@ export default function TransactionModal({
               }}
             >
               <ArrowDownLeft size={18} />
-              <span>Despesa</span>
+              <span>Despesa (negativo)</span>
             </button>
 
             <button
@@ -179,13 +207,18 @@ export default function TransactionModal({
               }}
             >
               <ArrowUpRight size={18} />
-              <span>Receita</span>
+              <span>Receita (positivo)</span>
             </button>
           </div>
 
           {/* Valor (R$) */}
           <div className="input-group">
-            <label className="input-label">Valor (R$)</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label className="input-label" style={{ marginBottom: 0 }}>Valor (R$)</label>
+              <span style={{ fontSize: '0.75rem', color: type === 'expense' ? '#fb7185' : '#34d399', fontWeight: 600 }}>
+                {type === 'expense' ? 'Informe com sinal negativo (ex: -150,00)' : 'Informe com sinal positivo (ex: 1500,00)'}
+              </span>
+            </div>
             <div style={{ position: 'relative' }}>
               <span style={{
                 position: 'absolute',
@@ -199,12 +232,13 @@ export default function TransactionModal({
                 R$
               </span>
               <input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0,00"
+                type="text"
+                placeholder={type === 'expense' ? '-150,00' : '1500,00'}
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  setError('');
+                }}
                 required
                 className="input-field mono"
                 style={{ paddingLeft: '44px', fontSize: '1.2rem', fontWeight: 700 }}

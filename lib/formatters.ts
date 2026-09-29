@@ -1,10 +1,25 @@
-export function formatCurrencyBRL(amount: number): string {
+import Big from 'big.js';
+
+export function formatCurrencyBRL(amount: number | string | Big): string {
+  let numVal: number;
+  if (amount instanceof Big) {
+    numVal = Number(amount.toFixed(2));
+  } else if (typeof amount === 'string') {
+    numVal = Number(amount.replace(',', '.'));
+  } else {
+    numVal = amount;
+  }
+
+  if (isNaN(numVal)) {
+    numVal = 0;
+  }
+
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(numVal);
 }
 
 export function formatDateBR(dateString: string): string {

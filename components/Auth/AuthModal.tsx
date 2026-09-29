@@ -85,8 +85,9 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
         if (error) throw error;
         setSuccessMsg('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Ocorreu um erro ao processar a autenticação.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Ocorreu um erro ao processar a autenticação.';
+      setErrorMsg(message);
     } finally {
       setLoading(false);
     }

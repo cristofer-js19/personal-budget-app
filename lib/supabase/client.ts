@@ -15,7 +15,8 @@ export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
   supabaseAnonKey &&
   !supabaseUrl.includes('your-project') &&
-  supabaseUrl.startsWith('http')
+  // Enforce HTTPS communication for external APIs (Rule 2)
+  (supabaseUrl.startsWith('https://') || supabaseUrl.startsWith('http://localhost') || supabaseUrl.startsWith('http://127.0.0.1'))
 );
 
 export const supabase: SupabaseClient | null = isSupabaseConfigured

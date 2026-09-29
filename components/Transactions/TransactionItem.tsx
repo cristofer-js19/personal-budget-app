@@ -104,7 +104,7 @@ export default function TransactionItem({
           textAlign: 'right',
         }}>
           {isIncome ? '+ ' : '- '}
-          {formatCurrencyBRL(transaction.amount)}
+          {formatCurrencyBRL(Math.abs(Number(transaction.amount)))}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

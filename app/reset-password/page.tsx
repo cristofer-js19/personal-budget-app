@@ -41,8 +41,9 @@ export default function ResetPasswordPage() {
 
       if (error) throw error;
       setSuccessMsg('Sua senha foi redefinida com sucesso! Você já pode voltar e entrar na sua conta.');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Erro ao redefinir a senha.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao redefinir a senha.';
+      setErrorMsg(message);
     } finally {
       setLoading(false);
     }

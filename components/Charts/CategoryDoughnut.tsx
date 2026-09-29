@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import { Transaction, Category } from '@/lib/types';
 import { formatCurrencyBRL } from '@/lib/formatters';
 
+import { calculateCategoryTotals } from '@/lib/financial';
+
 interface CategoryDoughnutProps {
   transactions: Transaction[];
   categories: Category[];
@@ -12,38 +14,25 @@ interface CategoryDoughnutProps {
 export default function CategoryDoughnut({ transactions, categories }: CategoryDoughnutProps) {
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
 
-  // Filter only expenses
-  const expenses = transactions.filter((t) => t.type === 'expense');
-  const totalExpense = expenses.reduce((acc, curr) => acc + Number(curr.amount), 0);
-
-  // Group by category
-  const categoryTotals: { [id: string]: { name: string; color: string; amount: number } } = {};
-
-  expenses.forEach((tx) => {
-    const cat = categories.find((c) => c.id === tx.category_id);
-    const catId = cat ? cat.id : 'other';
-    const catName = cat ? cat.name : 'Outros';
-    const catColor = cat ? cat.color : '#64748b';
-
-    if (!categoryTotals[catId]) {
-      categoryTotals[catId] = { name: catName, color: catColor, amount: 0 };
-    }
-    categoryTotals[catId].amount += Number(tx.amount);
-  });
-
-  const sortedCategories = Object.entries(categoryTotals)
-    .map(([id, item]) => ({
-      id,
-      ...item,
-      percentage: totalExpense > 0 ? (item.amount / totalExpense) * 100 : 0,
-    }))
-    .sort((a, b) => b.amount - a.amount);
+  // Compute category totals using Big.js precision module
+  const sortedCategories = calculateCategoryTotals(transactions, categories, 'expense');
+  const totalExpense = sortedCategories.reduce((acc, curr) => acc + Number(curr.amount.toFixed(2)), 0);
 
   // SVG Doughnut geometry
   const radius = 75;
   const strokeWidth = 24;
   const circumference = 2 * Math.PI * radius;
-  let cumulativeOffset = 0;
+
+  const categoriesWithOffset = sortedCategories.map((item, idx) => {
+    const currentOffset = sortedCategories
+      .slice(0, idx)
+      .reduce((sum, curr) => sum + (curr.percentage / 100) * circumference, 0);
+    return {
+      ...item,
+      strokeDasharray: `${(item.percentage / 100) * circumference} ${circumference}`,
+      strokeDashoffset: -currentOffset,
+    };
+  });
 
   return (
     <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
@@ -75,11 +64,7 @@ export default function CategoryDoughnut({ transactions, categories }: CategoryD
                 strokeWidth={strokeWidth}
               />
 
-              {sortedCategories.map((item) => {
-                const strokeDasharray = `${(item.percentage / 100) * circumference} ${circumference}`;
-                const strokeDashoffset = -cumulativeOffset;
-                cumulativeOffset += (item.percentage / 100) * circumference;
-
+              {categoriesWithOffset.map((item) => {
                 const isHovered = hoveredCategory === item.id;
 
                 return (
@@ -91,8 +76,8 @@ export default function CategoryDoughnut({ transactions, categories }: CategoryD
                     fill="transparent"
                     stroke={item.color}
                     strokeWidth={isHovered ? strokeWidth + 4 : strokeWidth}
-                    strokeDasharray={strokeDasharray}
-                    strokeDashoffset={strokeDashoffset}
+                    strokeDasharray={item.strokeDasharray}
+                    strokeDashoffset={item.strokeDashoffset}
                     style={{
                       transition: 'all 200ms ease',
                       cursor: 'pointer',

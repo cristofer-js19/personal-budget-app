@@ -12,6 +12,10 @@ import AuthModal from '@/components/Auth/AuthModal';
 import { Transaction, Category } from '@/lib/types';
 import { DEFAULT_CATEGORIES, INITIAL_SAMPLE_TRANSACTIONS } from '@/lib/demoData';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { calculateFinancialTotals } from '@/lib/financial';
+import { getEncryptedLocalStorage, setEncryptedLocalStorage } from '@/lib/storage/encryptedStorage';
+import { handleApiError } from '@/lib/api/errorHandler';
+import { logger } from '@/lib/logger';
 import { Wallet, TrendingUp, TrendingDown, PiggyBank, Sparkles, Database } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 
@@ -19,7 +23,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   // Modals state
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
@@ -41,7 +45,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 2. Fetch Data (from Supabase if configured & logged in, or local storage / demo)
+  // 2. Fetch Data (from Supabase if configured & logged in, or local encrypted storage / demo)
   const loadTransactions = useCallback(async () => {
     setLoading(true);
 
@@ -52,7 +56,14 @@ export default function DashboardPage() {
           .from('categories')
           .select('*');
 
-        if (!catError && catData && catData.length > 0) {
+        if (catError) {
+          handleApiError(catError, {
+            onUnauthorized: () => {
+              setUser(null);
+              setIsAuthModalOpen(true);
+            },
+          });
+        } else if (catData && catData.length > 0) {
           setCategories(catData as Category[]);
         }
 
@@ -62,27 +73,34 @@ export default function DashboardPage() {
           .select('*')
           .order('date', { ascending: false });
 
-        if (!txError && txData) {
+        if (txError) {
+          handleApiError(txError, {
+            onUnauthorized: () => {
+              setUser(null);
+              setIsAuthModalOpen(true);
+            },
+          });
+        } else if (txData) {
           setTransactions(txData as Transaction[]);
           setLoading(false);
           return;
         }
       } catch (err) {
-        console.error('Error fetching Supabase data:', err);
+        handleApiError(err, {
+          onUnauthorized: () => {
+            setUser(null);
+            setIsAuthModalOpen(true);
+          },
+        });
       }
     }
 
-    // Fallback: load from localStorage if exists, else initial sample transactions
-    const savedTx = typeof window !== 'undefined' ? localStorage.getItem('financas_transactions') : null;
-    if (savedTx) {
-      try {
-        setTransactions(JSON.parse(savedTx));
-      } catch {
-        setTransactions(INITIAL_SAMPLE_TRANSACTIONS);
-      }
-    } else {
-      setTransactions(INITIAL_SAMPLE_TRANSACTIONS);
-    }
+    // Fallback: load from encrypted localStorage if exists, else initial sample transactions
+    const savedTx = await getEncryptedLocalStorage<Transaction[]>(
+      'financas_transactions',
+      INITIAL_SAMPLE_TRANSACTIONS
+    );
+    setTransactions(savedTx);
     setLoading(false);
   }, [user]);
 
@@ -90,12 +108,10 @@ export default function DashboardPage() {
     loadTransactions();
   }, [loadTransactions]);
 
-  // Save to localStorage when in local/demo mode
-  const persistLocalTransactions = (newTransactions: Transaction[]) => {
+  // Save to encrypted storage when in local/demo mode (Rule 2)
+  const persistLocalTransactions = async (newTransactions: Transaction[]) => {
     setTransactions(newTransactions);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('financas_transactions', JSON.stringify(newTransactions));
-    }
+    await setEncryptedLocalStorage('financas_transactions', newTransactions);
   };
 
   // 3. CRUD Handlers
@@ -116,7 +132,15 @@ export default function DashboardPage() {
             })
             .eq('id', id);
 
-          if (error) throw error;
+          if (error) {
+            handleApiError(error, {
+              onUnauthorized: () => {
+                setUser(null);
+                setIsAuthModalOpen(true);
+              },
+            });
+            return;
+          }
         } else {
           // Create
           const { error } = await supabase
@@ -131,26 +155,39 @@ export default function DashboardPage() {
               notes: data.notes,
             });
 
-          if (error) throw error;
+          if (error) {
+            handleApiError(error, {
+              onUnauthorized: () => {
+                setUser(null);
+                setIsAuthModalOpen(true);
+              },
+            });
+            return;
+          }
         }
 
         await loadTransactions();
         return;
       } catch (err) {
-        console.error('Failed to save to Supabase:', err);
+        handleApiError(err, {
+          onUnauthorized: () => {
+            setUser(null);
+            setIsAuthModalOpen(true);
+          },
+        });
       }
     }
 
-    // Local state fallback
+    // Local state fallback with encrypted storage
     if (id) {
       const updated = transactions.map((t) => (t.id === id ? { ...t, ...data } : t));
-      persistLocalTransactions(updated);
+      await persistLocalTransactions(updated);
     } else {
       const newTx: Transaction = {
         id: `local-${Date.now()}`,
         ...data,
       };
-      persistLocalTransactions([newTx, ...transactions]);
+      await persistLocalTransactions([newTx, ...transactions]);
     }
   };
 
@@ -158,49 +195,45 @@ export default function DashboardPage() {
     if (isSupabaseConfigured && supabase && user) {
       try {
         const { error } = await supabase.from('transactions').delete().eq('id', id);
-        if (!error) {
-          setTransactions(transactions.filter((t) => t.id !== id));
+        if (error) {
+          handleApiError(error, {
+            onUnauthorized: () => {
+              setUser(null);
+              setIsAuthModalOpen(true);
+            },
+          });
           return;
         }
+        setTransactions(transactions.filter((t) => t.id !== id));
+        return;
       } catch (err) {
-        console.error('Error deleting transaction from Supabase:', err);
+        handleApiError(err, {
+          onUnauthorized: () => {
+            setUser(null);
+            setIsAuthModalOpen(true);
+          },
+        });
       }
     }
 
     const updated = transactions.filter((t) => t.id !== id);
-    persistLocalTransactions(updated);
+    await persistLocalTransactions(updated);
   };
 
   const handleSignOut = async () => {
     if (isSupabaseConfigured && supabase) {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        logger.error('Failed to sign out properly');
+      }
     }
     setUser(null);
   };
 
-  // 4. Financial Calculations
+  // 4. Financial Calculations using Big.js precision module (Rule 1)
   const stats = useMemo(() => {
-    let totalIncome = 0;
-    let totalExpense = 0;
-
-    transactions.forEach((t) => {
-      const val = Number(t.amount);
-      if (t.type === 'income') {
-        totalIncome += val;
-      } else {
-        totalExpense += val;
-      }
-    });
-
-    const totalBalance = totalIncome - totalExpense;
-    const savingsRate = totalIncome > 0 ? Math.max(0, Math.round(((totalIncome - totalExpense) / totalIncome) * 100)) : 0;
-
-    return {
-      totalBalance,
-      totalIncome,
-      totalExpense,
-      savingsRate,
-    };
+    return calculateFinancialTotals(transactions);
   }, [transactions]);
 
   return (
@@ -256,7 +289,7 @@ export default function DashboardPage() {
                   Executando em Modo Local / Demonstração com dados em Reais (BRL)
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Para sincronizar com seu projeto Supabase, execute o script <code>supabase/schema.sql</code> no seu SQL Editor e defina as chaves em <code>.env.local</code>.
+                  Armazenamento local criptografado com precisão financeira via Big.js. Para sincronizar com Supabase, defina as chaves em <code>.env.local</code>.
                 </div>
               </div>
             </div>
@@ -283,7 +316,7 @@ export default function DashboardPage() {
             Visão Geral Financeira
           </h1>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-            Controle de receitas, despesas e taxa de poupança atualizados em tempo real.
+            Controle de receitas, despesas e taxa de poupança com precisão financeira.
           </p>
         </div>
 
@@ -293,8 +326,8 @@ export default function DashboardPage() {
             title="Saldo Líquido"
             amount={stats.totalBalance}
             icon={Wallet}
-            variant={stats.totalBalance >= 0 ? 'primary' : 'expense'}
-            subtitle={stats.totalBalance >= 0 ? 'Superávit acumulado' : 'Atenção: Saldo devedor'}
+            variant={stats.totalBalance.gte(0) ? 'primary' : 'expense'}
+            subtitle={stats.totalBalance.gte(0) ? 'Superávit acumulado' : 'Atenção: Saldo devedor'}
           />
 
           <StatCard

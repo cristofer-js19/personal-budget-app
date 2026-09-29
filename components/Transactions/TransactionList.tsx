@@ -38,8 +38,8 @@ export default function TransactionList({
       .sort((a, b) => {
         if (sortOrder === 'date-desc') return new Date(b.date).getTime() - new Date(a.date).getTime();
         if (sortOrder === 'date-asc') return new Date(a.date).getTime() - new Date(b.date).getTime();
-        if (sortOrder === 'amount-desc') return b.amount - a.amount;
-        if (sortOrder === 'amount-asc') return a.amount - b.amount;
+        if (sortOrder === 'amount-desc') return Math.abs(Number(b.amount)) - Math.abs(Number(a.amount));
+        if (sortOrder === 'amount-asc') return Math.abs(Number(a.amount)) - Math.abs(Number(b.amount));
         return 0;
       });
   }, [transactions, searchTerm, typeFilter, categoryFilter, sortOrder]);
@@ -130,7 +130,7 @@ export default function TransactionList({
             <ArrowUpDown size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
             <select
               value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value as any)}
+              onChange={(e) => setSortOrder(e.target.value as 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc')}
               className="input-field"
               style={{ paddingLeft: '38px', height: '42px', fontSize: '0.88rem', appearance: 'none', cursor: 'pointer' }}
             >

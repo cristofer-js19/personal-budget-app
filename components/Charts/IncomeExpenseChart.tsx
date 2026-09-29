@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import { Transaction } from '@/lib/types';
 import { formatCurrencyBRL } from '@/lib/formatters';
 
+import { getAbsoluteAmount } from '@/lib/financial';
+
 interface IncomeExpenseChartProps {
   transactions: Transaction[];
 }
@@ -26,10 +28,11 @@ export default function IncomeExpenseChart({ transactions }: IncomeExpenseChartP
   transactions.forEach((tx) => {
     const key = tx.date.substring(0, 7);
     if (monthMap[key]) {
+      const val = Number(getAbsoluteAmount(tx.amount).toFixed(2));
       if (tx.type === 'income') {
-        monthMap[key].income += Number(tx.amount);
+        monthMap[key].income += val;
       } else {
-        monthMap[key].expense += Number(tx.amount);
+        monthMap[key].expense += val;
       }
     }
   });

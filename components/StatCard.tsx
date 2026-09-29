@@ -4,9 +4,11 @@ import React from 'react';
 import { LucideIcon } from 'lucide-react';
 import { formatCurrencyBRL } from '@/lib/formatters';
 
+import Big from 'big.js';
+
 interface StatCardProps {
   title: string;
-  amount: number;
+  amount: number | Big;
   icon: LucideIcon;
   variant?: 'primary' | 'income' | 'expense' | 'neutral';
   subtitle?: string;
