@@ -20,6 +20,7 @@ export interface Transaction {
   description: string;
   notes?: string;
   created_at?: string;
+  deleted_at?: string | null;
 }
 
 export interface UserProfile {

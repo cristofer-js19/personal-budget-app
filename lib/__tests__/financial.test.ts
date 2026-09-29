@@ -9,6 +9,7 @@ import {
   validateTransactionInput,
 } from '../financial';
 import { formatCurrencyBRL } from '../formatters';
+import { mapDatabaseConstraintError } from '../services/transactionService';
 import { Transaction, Category } from '../types';
 
 describe('Financial Math Precision (Rule 1)', () => {
@@ -172,3 +173,44 @@ describe('formatCurrencyBRL (Rule 1 pt-BR currency formatting)', () => {
     expect(formattedBig).toMatch(/R\$\s*3\.450,75/);
   });
 });
+
+describe('Soft Delete Safeguard & Active Transactions (Global Rule 1)', () => {
+  it('excludes soft-deleted transactions from balance calculations', () => {
+    const transactions: Transaction[] = [
+      { id: '1', category_id: 'c1', amount: 5000, type: 'income', date: '2026-09-01', description: 'Active Income' },
+      { id: '2', category_id: 'c2', amount: -2000, type: 'expense', date: '2026-09-02', description: 'Active Expense' },
+      { id: '3', category_id: 'c2', amount: -1500, type: 'expense', date: '2026-09-03', description: 'Deleted Expense', deleted_at: '2026-09-04T10:00:00Z' },
+    ];
+
+    const balance = calculateBalance(transactions);
+    // 5000 - 2000 = 3000 (ignoring deleted 1500 expense)
+    expect(balance.toString()).toBe('3000');
+  });
+
+  it('excludes soft-deleted transactions from category totals', () => {
+    const categories: Category[] = [
+      { id: 'c1', name: 'Alimentação', type: 'expense', color: '#f59e0b', icon: 'Utensils' },
+    ];
+    const transactions: Transaction[] = [
+      { id: '1', category_id: 'c1', amount: -300, type: 'expense', date: '2026-09-01', description: 'Active Market' },
+      { id: '2', category_id: 'c1', amount: -700, type: 'expense', date: '2026-09-02', description: 'Deleted Market', deleted_at: '2026-09-03T12:00:00Z' },
+    ];
+
+    const totals = calculateCategoryTotals(transactions, categories, 'expense');
+    expect(totals).toHaveLength(1);
+    expect(totals[0].amount.toString()).toBe('300');
+  });
+});
+
+describe('Source-Level Security & Database Constraint Error Mapping (Global Rule 3)', () => {
+  it('maps PostgreSQL check constraint 23514 to user-friendly integrity messages', () => {
+    const incomeCheckErr = { code: '23514', message: 'violates check constraint "check_income_positive"' };
+    const expenseCheckErr = { code: '23514', message: 'violates check constraint "check_expense_negative"' };
+    const zeroCheckErr = { code: '23514', message: 'violates check constraint "check_transaction_amount_not_zero"' };
+
+    expect(mapDatabaseConstraintError(incomeCheckErr)).toContain('receitas devem ser estritamente positivas');
+    expect(mapDatabaseConstraintError(expenseCheckErr)).toContain('despesas devem ser estritamente negativas');
+    expect(mapDatabaseConstraintError(zeroCheckErr)).toContain('não pode ser zero');
+  });
+});
+

@@ -15,6 +15,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { calculateFinancialTotals } from '@/lib/financial';
 import { getEncryptedLocalStorage, setEncryptedLocalStorage } from '@/lib/storage/encryptedStorage';
 import { handleApiError } from '@/lib/api/errorHandler';
+import { softDeleteTransaction } from '@/lib/services/transactionService';
 import { logger } from '@/lib/logger';
 import { Wallet, TrendingUp, TrendingDown, PiggyBank, Sparkles, Database } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
@@ -67,10 +68,11 @@ export default function DashboardPage() {
           setCategories(catData as Category[]);
         }
 
-        // Fetch user transactions
+        // Fetch active user transactions (excluding soft-deleted rows)
         const { data: txData, error: txError } = await supabase
           .from('transactions')
           .select('*')
+          .is('deleted_at', null)
           .order('date', { ascending: false });
 
         if (txError) {
@@ -191,32 +193,19 @@ export default function DashboardPage() {
     }
   };
 
+  // Soft Delete Handler (Rule 1 & Rule 3)
   const handleDeleteTransaction = async (id: string) => {
     if (isSupabaseConfigured && supabase && user) {
-      try {
-        const { error } = await supabase.from('transactions').delete().eq('id', id);
-        if (error) {
-          handleApiError(error, {
-            onUnauthorized: () => {
-              setUser(null);
-              setIsAuthModalOpen(true);
-            },
-          });
-          return;
-        }
-        setTransactions(transactions.filter((t) => t.id !== id));
-        return;
-      } catch (err) {
-        handleApiError(err, {
-          onUnauthorized: () => {
-            setUser(null);
-            setIsAuthModalOpen(true);
-          },
-        });
+      const result = await softDeleteTransaction(supabase, id);
+      if (result.success) {
+        setTransactions((prev) => prev.filter((t) => t.id !== id));
       }
+      return;
     }
 
-    const updated = transactions.filter((t) => t.id !== id);
+    // Non-destructive soft delete in local storage: preserve history with timestamp
+    const now = new Date().toISOString();
+    const updated = transactions.map((t) => (t.id === id ? { ...t, deleted_at: now } : t));
     await persistLocalTransactions(updated);
   };
 
@@ -231,10 +220,15 @@ export default function DashboardPage() {
     setUser(null);
   };
 
-  // 4. Financial Calculations using Big.js precision module (Rule 1)
-  const stats = useMemo(() => {
-    return calculateFinancialTotals(transactions);
+  // Active (non-deleted) transactions for all views & computations
+  const activeTransactions = useMemo(() => {
+    return transactions.filter((t) => !t.deleted_at);
   }, [transactions]);
+
+  // Financial Calculations using Big.js precision module (Rule 1)
+  const stats = useMemo(() => {
+    return calculateFinancialTotals(activeTransactions);
+  }, [activeTransactions]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -289,7 +283,7 @@ export default function DashboardPage() {
                   Executando em Modo Local / Demonstração com dados em Reais (BRL)
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Armazenamento local criptografado com precisão financeira via Big.js. Para sincronizar com Supabase, defina as chaves em <code>.env.local</code>.
+                  Armazenamento local criptografado com precisão financeira via Big.js. Para sincronizar com Supabase, execute <code>supabase/schema.sql</code> e defina as chaves em <code>.env.local</code>.
                 </div>
               </div>
             </div>
@@ -359,13 +353,13 @@ export default function DashboardPage() {
 
         {/* Interactive Visual Charts Grid */}
         <div className="charts-grid">
-          <IncomeExpenseChart transactions={transactions} />
-          <CategoryDoughnut transactions={transactions} categories={categories} />
+          <IncomeExpenseChart transactions={activeTransactions} />
+          <CategoryDoughnut transactions={activeTransactions} categories={categories} />
         </div>
 
         {/* Transaction Management Section */}
         <TransactionList
-          transactions={transactions}
+          transactions={activeTransactions}
           categories={categories}
           onEdit={(tx) => {
             setEditingTransaction(tx);

@@ -1,5 +1,6 @@
 -- ==============================================================================
 -- PERSONAL BUDGET APP - SUPABASE DATABASE SCHEMA & RLS POLICIES
+-- Hardened with Source-Level Security (Rule 3) and Destructive Safeguards (Rule 1)
 -- Default Currency: BRL (Brazilian Real, R$)
 -- Authentication Mode: Email & Password (with Password Recovery)
 -- ==============================================================================
@@ -12,23 +13,25 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   currency TEXT NOT NULL DEFAULT 'BRL',
   monthly_budget_goal NUMERIC(12, 2) DEFAULT 3000.00,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT check_monthly_budget_goal_positive CHECK (monthly_budget_goal >= 0),
+  CONSTRAINT check_currency_format CHECK (currency ~ '^[A-Z]{3}$')
 );
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- Profiles Policies
+-- Profiles Policies (using subselect for cached auth.uid evaluation)
 CREATE POLICY "Users can view their own profile"
   ON public.profiles FOR SELECT
-  USING (auth.uid() = id);
+  USING ((select auth.uid()) = id);
 
 CREATE POLICY "Users can update their own profile"
   ON public.profiles FOR UPDATE
-  USING (auth.uid() = id);
+  USING ((select auth.uid()) = id);
 
 CREATE POLICY "Users can insert their own profile"
   ON public.profiles FOR INSERT
-  WITH CHECK (auth.uid() = id);
+  WITH CHECK ((select auth.uid()) = id);
 
 
 -- 2. Categories Table
@@ -47,22 +50,24 @@ ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 -- Categories Policies
 CREATE POLICY "Users can view default categories and their own categories"
   ON public.categories FOR SELECT
-  USING (user_id IS NULL OR auth.uid() = user_id);
+  USING (user_id IS NULL OR (select auth.uid()) = user_id);
 
 CREATE POLICY "Users can create their own categories"
   ON public.categories FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK ((select auth.uid()) = user_id);
 
 CREATE POLICY "Users can update their own categories"
   ON public.categories FOR UPDATE
-  USING (auth.uid() = user_id);
+  USING ((select auth.uid()) = user_id);
 
 CREATE POLICY "Users can delete their own categories"
   ON public.categories FOR DELETE
-  USING (auth.uid() = user_id);
+  USING ((select auth.uid()) = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_categories_user_id ON public.categories(user_id);
 
 
--- 3. Transactions Table
+-- 3. Transactions Table (Source-Level Integrity & Soft Delete)
 CREATE TABLE IF NOT EXISTS public.transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -72,27 +77,41 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   date DATE NOT NULL DEFAULT CURRENT_DATE,
   description TEXT NOT NULL,
   notes TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ DEFAULT NULL, -- Soft Delete column (Rule 1)
+
+  -- Source-Level Financial Data Integrity Constraints (Rule 3)
+  CONSTRAINT check_transaction_amount_not_zero CHECK (amount <> 0),
+  CONSTRAINT check_income_positive CHECK (type <> 'income' OR amount > 0),
+  CONSTRAINT check_expense_negative CHECK (type <> 'expense' OR amount < 0)
 );
 
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 
--- Transactions Policies
-CREATE POLICY "Users can view their own transactions"
+-- Transactions Policies (Soft-delete aware & optimized per-query auth caching)
+CREATE POLICY "Users can view their own active transactions"
   ON public.transactions FOR SELECT
-  USING (auth.uid() = user_id);
+  USING ((select auth.uid()) = user_id AND deleted_at IS NULL);
 
 CREATE POLICY "Users can create their own transactions"
   ON public.transactions FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK ((select auth.uid()) = user_id);
 
 CREATE POLICY "Users can update their own transactions"
   ON public.transactions FOR UPDATE
-  USING (auth.uid() = user_id);
+  USING ((select auth.uid()) = user_id);
 
-CREATE POLICY "Users can delete their own transactions"
-  ON public.transactions FOR DELETE
-  USING (auth.uid() = user_id);
+-- Hard deletes are prohibited by default; users soft-delete via UPDATE deleted_at
+CREATE POLICY "Users can soft delete their own transactions"
+  ON public.transactions FOR UPDATE
+  USING ((select auth.uid()) = user_id)
+  WITH CHECK ((select auth.uid()) = user_id);
+
+-- Performance & Foreign Key Indexes
+CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON public.transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_category_id ON public.transactions(category_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON public.transactions(date DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_active_user ON public.transactions(user_id) WHERE deleted_at IS NULL;
 
 
 -- 4. Initial Default System Categories (BRL localized)
@@ -116,9 +135,13 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 
--- 5. Trigger to automatically create profile on signup
+-- 5. Trigger to automatically create profile on signup (Hardened search_path)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
 BEGIN
   INSERT INTO public.profiles (id, email, full_name, currency)
   VALUES (
@@ -129,7 +152,7 @@ BEGIN
   );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users

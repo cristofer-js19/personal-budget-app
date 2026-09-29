@@ -110,12 +110,20 @@ export function getAbsoluteAmount(amount: string | number | Big): Big {
 }
 
 /**
+ * Filters out soft-deleted transactions (Rule 1).
+ */
+export function getActiveTransactions(transactions: Transaction[]): Transaction[] {
+  return transactions.filter((t) => !t.deleted_at);
+}
+
+/**
  * Calculates net balance: total income minus total expense using Big.js precision.
  */
 export function calculateBalance(transactions: Transaction[]): Big {
   let total = new Big(0);
+  const active = getActiveTransactions(transactions);
 
-  for (const t of transactions) {
+  for (const t of active) {
     const val = getAbsoluteAmount(t.amount);
     if (t.type === 'income') {
       total = total.plus(val);
@@ -138,8 +146,9 @@ export function calculateFinancialTotals(transactions: Transaction[]): {
 } {
   let totalIncome = new Big(0);
   let totalExpense = new Big(0);
+  const active = getActiveTransactions(transactions);
 
-  for (const t of transactions) {
+  for (const t of active) {
     const val = getAbsoluteAmount(t.amount);
     if (t.type === 'income') {
       totalIncome = totalIncome.plus(val);
@@ -182,7 +191,8 @@ export function calculateCategoryTotals(
   categories: Category[],
   typeFilter: TransactionType = 'expense'
 ): CategoryTotal[] {
-  const filtered = transactions.filter((t) => t.type === typeFilter);
+  const active = getActiveTransactions(transactions);
+  const filtered = active.filter((t) => t.type === typeFilter);
   const totalSum = filtered.reduce((acc, curr) => acc.plus(getAbsoluteAmount(curr.amount)), new Big(0));
 
   const categoryMap = new Map<string, { cat: Category; amount: Big }>();
@@ -237,7 +247,8 @@ export function calculateMonthlyProjection(
   transactions: Transaction[],
   monthsAhead: number = 1
 ): MonthlyProjection {
-  if (transactions.length === 0) {
+  const active = getActiveTransactions(transactions);
+  if (active.length === 0) {
     return {
       monthsAhead,
       projectedIncome: new Big(0),
@@ -251,7 +262,7 @@ export function calculateMonthlyProjection(
 
   const monthlySums: { [monthKey: string]: { income: Big; expense: Big } } = {};
 
-  for (const tx of transactions) {
+  for (const tx of active) {
     const monthKey = tx.date ? tx.date.substring(0, 7) : 'current';
     if (!monthlySums[monthKey]) {
       monthlySums[monthKey] = { income: new Big(0), expense: new Big(0) };
