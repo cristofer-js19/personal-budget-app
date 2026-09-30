@@ -1,10 +1,18 @@
-import type { Metadata } from 'next';
-import './globals.css';
+import type { Metadata } from "next";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: 'Finanças Pro | Gestão Financeira Pessoal',
-  description: 'Aplicativo moderno de gestão financeira pessoal com Next.js e Supabase. Monitore receitas, despesas, orçamentos e relatórios em Reais (BRL).',
-  keywords: ['orçamento pessoal', 'finanças', 'Next.js', 'Supabase', 'BRL', 'controle financeiro'],
+  title: "Finanças Pro | Gestão Financeira Pessoal",
+  description:
+    "Aplicativo moderno de gestão financeira pessoal com Next.js e Supabase. Monitore receitas, despesas, orçamentos e relatórios em Reais (BRL).",
+  keywords: [
+    "orçamento pessoal",
+    "finanças",
+    "Next.js",
+    "Supabase",
+    "BRL",
+    "controle financeiro",
+  ],
 };
 
 export default function RootLayout({

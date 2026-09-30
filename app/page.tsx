@@ -1,24 +1,37 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import Navbar from '@/components/Navbar';
-import StatCard from '@/components/StatCard';
-import IncomeExpenseChart from '@/components/Charts/IncomeExpenseChart';
-import CategoryDoughnut from '@/components/Charts/CategoryDoughnut';
-import TransactionList from '@/components/Transactions/TransactionList';
-import TransactionModal from '@/components/Transactions/TransactionModal';
-import AuthModal from '@/components/Auth/AuthModal';
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import Navbar from "@/components/Navbar";
+import StatCard from "@/components/StatCard";
+import IncomeExpenseChart from "@/components/Charts/IncomeExpenseChart";
+import CategoryDoughnut from "@/components/Charts/CategoryDoughnut";
+import TransactionList from "@/components/Transactions/TransactionList";
+import TransactionModal from "@/components/Transactions/TransactionModal";
+import AuthModal from "@/components/Auth/AuthModal";
 
-import { Transaction, Category } from '@/lib/types';
-import { DEFAULT_CATEGORIES, INITIAL_SAMPLE_TRANSACTIONS } from '@/lib/demoData';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
-import { calculateFinancialTotals } from '@/lib/financial';
-import { getEncryptedLocalStorage, setEncryptedLocalStorage } from '@/lib/storage/encryptedStorage';
-import { handleApiError } from '@/lib/api/errorHandler';
-import { softDeleteTransaction } from '@/lib/services/transactionService';
-import { logger } from '@/lib/logger';
-import { Wallet, TrendingUp, TrendingDown, PiggyBank, Sparkles, Database } from 'lucide-react';
-import { User } from '@supabase/supabase-js';
+import { Transaction, Category } from "@/lib/types";
+import {
+  DEFAULT_CATEGORIES,
+  INITIAL_SAMPLE_TRANSACTIONS,
+} from "@/lib/demoData";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { calculateFinancialTotals } from "@/lib/financial";
+import {
+  getEncryptedLocalStorage,
+  setEncryptedLocalStorage,
+} from "@/lib/storage/encryptedStorage";
+import { handleApiError } from "@/lib/api/errorHandler";
+import { softDeleteTransaction } from "@/lib/services/transactionService";
+import { logger } from "@/lib/logger";
+import {
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+  PiggyBank,
+  Sparkles,
+  Database,
+} from "lucide-react";
+import { User } from "@supabase/supabase-js";
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -28,7 +41,8 @@ export default function DashboardPage() {
 
   // Modals state
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editingTransaction, setEditingTransaction] =
+    useState<Transaction | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   // 1. Check Supabase Auth State
@@ -38,7 +52,9 @@ export default function DashboardPage() {
         setUser(session?.user ?? null);
       });
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
         setUser(session?.user ?? null);
       });
 
@@ -54,8 +70,8 @@ export default function DashboardPage() {
       try {
         // Fetch categories
         const { data: catData, error: catError } = await supabase
-          .from('categories')
-          .select('*');
+          .from("categories")
+          .select("*");
 
         if (catError) {
           handleApiError(catError, {
@@ -70,10 +86,10 @@ export default function DashboardPage() {
 
         // Fetch active user transactions (excluding soft-deleted rows)
         const { data: txData, error: txError } = await supabase
-          .from('transactions')
-          .select('*')
-          .is('deleted_at', null)
-          .order('date', { ascending: false });
+          .from("transactions")
+          .select("*")
+          .is("deleted_at", null)
+          .order("date", { ascending: false });
 
         if (txError) {
           handleApiError(txError, {
@@ -99,8 +115,8 @@ export default function DashboardPage() {
 
     // Fallback: load from encrypted localStorage if exists, else initial sample transactions
     const savedTx = await getEncryptedLocalStorage<Transaction[]>(
-      'financas_transactions',
-      INITIAL_SAMPLE_TRANSACTIONS
+      "financas_transactions",
+      INITIAL_SAMPLE_TRANSACTIONS,
     );
     setTransactions(savedTx);
     setLoading(false);
@@ -113,17 +129,20 @@ export default function DashboardPage() {
   // Save to encrypted storage when in local/demo mode (Rule 2)
   const persistLocalTransactions = async (newTransactions: Transaction[]) => {
     setTransactions(newTransactions);
-    await setEncryptedLocalStorage('financas_transactions', newTransactions);
+    await setEncryptedLocalStorage("financas_transactions", newTransactions);
   };
 
   // 3. CRUD Handlers
-  const handleSaveTransaction = async (data: Omit<Transaction, 'id'>, id?: string) => {
+  const handleSaveTransaction = async (
+    data: Omit<Transaction, "id">,
+    id?: string,
+  ) => {
     if (isSupabaseConfigured && supabase && user) {
       try {
         if (id) {
           // Update
           const { error } = await supabase
-            .from('transactions')
+            .from("transactions")
             .update({
               amount: data.amount,
               type: data.type,
@@ -132,7 +151,7 @@ export default function DashboardPage() {
               description: data.description,
               notes: data.notes,
             })
-            .eq('id', id);
+            .eq("id", id);
 
           if (error) {
             handleApiError(error, {
@@ -145,17 +164,15 @@ export default function DashboardPage() {
           }
         } else {
           // Create
-          const { error } = await supabase
-            .from('transactions')
-            .insert({
-              user_id: user.id,
-              amount: data.amount,
-              type: data.type,
-              category_id: data.category_id,
-              date: data.date,
-              description: data.description,
-              notes: data.notes,
-            });
+          const { error } = await supabase.from("transactions").insert({
+            user_id: user.id,
+            amount: data.amount,
+            type: data.type,
+            category_id: data.category_id,
+            date: data.date,
+            description: data.description,
+            notes: data.notes,
+          });
 
           if (error) {
             handleApiError(error, {
@@ -182,7 +199,9 @@ export default function DashboardPage() {
 
     // Local state fallback with encrypted storage
     if (id) {
-      const updated = transactions.map((t) => (t.id === id ? { ...t, ...data } : t));
+      const updated = transactions.map((t) =>
+        t.id === id ? { ...t, ...data } : t,
+      );
       await persistLocalTransactions(updated);
     } else {
       const newTx: Transaction = {
@@ -205,7 +224,9 @@ export default function DashboardPage() {
 
     // Non-destructive soft delete in local storage: preserve history with timestamp
     const now = new Date().toISOString();
-    const updated = transactions.map((t) => (t.id === id ? { ...t, deleted_at: now } : t));
+    const updated = transactions.map((t) =>
+      t.id === id ? { ...t, deleted_at: now } : t,
+    );
     await persistLocalTransactions(updated);
   };
 
@@ -214,7 +235,7 @@ export default function DashboardPage() {
       try {
         await supabase.auth.signOut();
       } catch {
-        logger.error('Failed to sign out properly');
+        logger.error("Failed to sign out properly");
       }
     }
     setUser(null);
@@ -231,7 +252,9 @@ export default function DashboardPage() {
   }, [activeTransactions]);
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div
+      style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}
+    >
       {/* Navigation */}
       <Navbar
         user={user}
@@ -245,56 +268,70 @@ export default function DashboardPage() {
       />
 
       {/* Main Body */}
-      <main className="container" style={{ flex: 1, paddingBottom: '60px', paddingTop: '32px' }}>
+      <main
+        className="container"
+        style={{ flex: 1, paddingBottom: "60px", paddingTop: "32px" }}
+      >
         {/* Supabase Onboarding Banner if not yet connected */}
         {!isSupabaseConfigured && (
           <div
             className="glass-panel"
             style={{
-              padding: '16px 20px',
-              marginBottom: '28px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '16px',
-              background: 'linear-gradient(90deg, rgba(99, 102, 241, 0.1) 0%, rgba(16, 185, 129, 0.08) 100%)',
-              border: '1px solid rgba(99, 102, 241, 0.25)',
-              flexWrap: 'wrap',
+              padding: "16px 20px",
+              marginBottom: "28px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "16px",
+              background:
+                "linear-gradient(90deg, rgba(99, 102, 241, 0.1) 0%, rgba(16, 185, 129, 0.08) 100%)",
+              border: "1px solid rgba(99, 102, 241, 0.25)",
+              flexWrap: "wrap",
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
               <div
                 style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '10px',
-                  background: 'rgba(99, 102, 241, 0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#818cf8',
+                  width: "38px",
+                  height: "38px",
+                  borderRadius: "10px",
+                  background: "rgba(99, 102, 241, 0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#818cf8",
                   flexShrink: 0,
                 }}
               >
                 <Database size={20} />
               </div>
               <div>
-                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#f8fafc' }}>
-                  Executando em Modo Local / Demonstração com dados em Reais (BRL)
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: "0.95rem",
+                    color: "#f8fafc",
+                  }}
+                >
+                  Executando em Modo Local / Demonstração com dados em Reais
+                  (BRL)
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Armazenamento local criptografado com precisão financeira via Big.js. Para sincronizar com Supabase, execute <code>supabase/schema.sql</code> e defina as chaves em <code>.env.local</code>.
+                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                  Armazenamento local criptografado com precisão financeira via
+                  Big.js. Para sincronizar com Supabase, execute{" "}
+                  <code>supabase/schema.sql</code> e defina as chaves em{" "}
+                  <code>.env.local</code>.
                 </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: "flex", gap: "10px" }}>
               <button
                 onClick={() => {
                   persistLocalTransactions(INITIAL_SAMPLE_TRANSACTIONS);
                 }}
                 className="btn btn-secondary"
-                style={{ fontSize: '0.82rem', padding: '6px 12px' }}
+                style={{ fontSize: "0.82rem", padding: "6px 12px" }}
                 title="Restaura os dados de exemplo pré-carregados"
               >
                 <Sparkles size={14} />
@@ -305,12 +342,20 @@ export default function DashboardPage() {
         )}
 
         {/* Dashboard Header Greeting */}
-        <div style={{ marginBottom: '28px' }}>
-          <h1 style={{ fontSize: '1.85rem', fontWeight: 800, letterSpacing: '-0.03em', marginBottom: '6px' }}>
+        <div style={{ marginBottom: "28px" }}>
+          <h1
+            style={{
+              fontSize: "1.85rem",
+              fontWeight: 800,
+              letterSpacing: "-0.03em",
+              marginBottom: "6px",
+            }}
+          >
             Visão Geral Financeira
           </h1>
-          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-            Controle de receitas, despesas e taxa de poupança com precisão financeira.
+          <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+            Controle de receitas, despesas e taxa de poupança com precisão
+            financeira.
           </p>
         </div>
 
@@ -320,8 +365,12 @@ export default function DashboardPage() {
             title="Saldo Líquido"
             amount={stats.totalBalance}
             icon={Wallet}
-            variant={stats.totalBalance.gte(0) ? 'primary' : 'expense'}
-            subtitle={stats.totalBalance.gte(0) ? 'Superávit acumulado' : 'Atenção: Saldo devedor'}
+            variant={stats.totalBalance.gte(0) ? "primary" : "expense"}
+            subtitle={
+              stats.totalBalance.gte(0)
+                ? "Superávit acumulado"
+                : "Atenção: Saldo devedor"
+            }
           />
 
           <StatCard
@@ -354,7 +403,10 @@ export default function DashboardPage() {
         {/* Interactive Visual Charts Grid */}
         <div className="charts-grid">
           <IncomeExpenseChart transactions={activeTransactions} />
-          <CategoryDoughnut transactions={activeTransactions} categories={categories} />
+          <CategoryDoughnut
+            transactions={activeTransactions}
+            categories={categories}
+          />
         </div>
 
         {/* Transaction Management Section */}

@@ -5,36 +5,36 @@
  * Uses Web Crypto API (AES-GCM 256-bit with PBKDF2 key derivation).
  */
 
-const APP_STORAGE_SALT = 'financas-secure-v1-salt';
-const STORAGE_PASSPHRASE = 'financas-client-budget-encryption-secret';
+const APP_STORAGE_SALT = "financas-secure-v1-salt";
+const STORAGE_PASSPHRASE = "financas-client-budget-encryption-secret";
 
 async function getEncryptionKey(): Promise<CryptoKey> {
   const enc = new TextEncoder();
   const keyMaterial = await window.crypto.subtle.importKey(
-    'raw',
+    "raw",
     enc.encode(STORAGE_PASSPHRASE),
-    { name: 'PBKDF2' },
+    { name: "PBKDF2" },
     false,
-    ['deriveKey']
+    ["deriveKey"],
   );
 
   return window.crypto.subtle.deriveKey(
     {
-      name: 'PBKDF2',
+      name: "PBKDF2",
       salt: enc.encode(APP_STORAGE_SALT),
       iterations: 100000,
-      hash: 'SHA-256',
+      hash: "SHA-256",
     },
     keyMaterial,
-    { name: 'AES-GCM', length: 256 },
+    { name: "AES-GCM", length: 256 },
     false,
-    ['encrypt', 'decrypt']
+    ["encrypt", "decrypt"],
   );
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
-  let binary = '';
+  let binary = "";
   for (let i = 0; i < bytes.byteLength; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
@@ -51,8 +51,8 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 }
 
 export async function encryptData<T>(data: T): Promise<string> {
-  if (typeof window === 'undefined' || !window.crypto?.subtle) {
-    throw new Error('Web Crypto API is not available.');
+  if (typeof window === "undefined" || !window.crypto?.subtle) {
+    throw new Error("Web Crypto API is not available.");
   }
 
   const key = await getEncryptionKey();
@@ -60,9 +60,9 @@ export async function encryptData<T>(data: T): Promise<string> {
   const encoded = new TextEncoder().encode(JSON.stringify(data));
 
   const cipherBuffer = await window.crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: "AES-GCM", iv },
     key,
-    encoded
+    encoded,
   );
 
   const payload = {
@@ -74,14 +74,19 @@ export async function encryptData<T>(data: T): Promise<string> {
 }
 
 export async function decryptData<T>(encryptedString: string): Promise<T> {
-  if (typeof window === 'undefined' || !window.crypto?.subtle) {
-    throw new Error('Web Crypto API is not available.');
+  if (typeof window === "undefined" || !window.crypto?.subtle) {
+    throw new Error("Web Crypto API is not available.");
   }
 
   // Backward compatibility: If previously stored as unencrypted JSON, parse directly
   try {
     const parsed = JSON.parse(encryptedString);
-    if (!parsed || typeof parsed !== 'object' || !('iv' in parsed) || !('data' in parsed)) {
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("iv" in parsed) ||
+      !("data" in parsed)
+    ) {
       return parsed as T;
     }
 
@@ -90,9 +95,9 @@ export async function decryptData<T>(encryptedString: string): Promise<T> {
     const cipherBuffer = base64ToArrayBuffer(parsed.data);
 
     const decryptedBuffer = await window.crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
+      { name: "AES-GCM", iv },
       key,
-      cipherBuffer
+      cipherBuffer,
     );
 
     const decryptedText = new TextDecoder().decode(decryptedBuffer);
@@ -107,8 +112,11 @@ export async function decryptData<T>(encryptedString: string): Promise<T> {
   }
 }
 
-export async function setEncryptedLocalStorage<T>(key: string, data: T): Promise<void> {
-  if (typeof window === 'undefined') return;
+export async function setEncryptedLocalStorage<T>(
+  key: string,
+  data: T,
+): Promise<void> {
+  if (typeof window === "undefined") return;
   try {
     const ciphertext = await encryptData(data);
     localStorage.setItem(key, ciphertext);
@@ -117,15 +125,18 @@ export async function setEncryptedLocalStorage<T>(key: string, data: T): Promise
   }
 }
 
-export async function getEncryptedLocalStorage<T>(key: string, fallback: T): Promise<T> {
-  if (typeof window === 'undefined') return fallback;
+export async function getEncryptedLocalStorage<T>(
+  key: string,
+  fallback: T,
+): Promise<T> {
+  if (typeof window === "undefined") return fallback;
   const raw = localStorage.getItem(key);
   if (!raw) return fallback;
 
   try {
     const result = await decryptData<T>(raw);
     // Auto-migrate legacy unencrypted data to encrypted
-    if (raw.startsWith('[') || raw.startsWith('{')) {
+    if (raw.startsWith("[") || raw.startsWith("{")) {
       if (!raw.includes('"iv"') || !raw.includes('"data"')) {
         await setEncryptedLocalStorage(key, result);
       }

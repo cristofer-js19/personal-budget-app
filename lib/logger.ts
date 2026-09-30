@@ -4,24 +4,24 @@
  * using console.log, print, or log files in a production environment."
  */
 
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = process.env.NODE_ENV === "production";
 
 // Keywords that indicate sensitive financial or user data
 const SENSITIVE_KEYS = [
-  'amount',
-  'balance',
-  'totalbalance',
-  'totalincome',
-  'totalexpense',
-  'email',
-  'password',
-  'user',
-  'notes',
-  'description',
-  'transactions',
-  'token',
-  'authorization',
-  'cookie',
+  "amount",
+  "balance",
+  "totalbalance",
+  "totalincome",
+  "totalexpense",
+  "email",
+  "password",
+  "user",
+  "notes",
+  "description",
+  "transactions",
+  "token",
+  "authorization",
+  "cookie",
 ];
 
 function sanitize(value: unknown): unknown {
@@ -29,14 +29,18 @@ function sanitize(value: unknown): unknown {
     return value;
   }
 
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
     return value;
   }
 
   if (value instanceof Error) {
     return {
       name: value.name,
-      message: isProduction ? 'An unexpected error occurred.' : value.message,
+      message: isProduction ? "An unexpected error occurred." : value.message,
     };
   }
 
@@ -44,12 +48,12 @@ function sanitize(value: unknown): unknown {
     return value.map(sanitize);
   }
 
-  if (typeof value === 'object') {
+  if (typeof value === "object") {
     const sanitizedObj: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
       const lowerKey = k.toLowerCase();
       if (SENSITIVE_KEYS.some((sensitive) => lowerKey.includes(sensitive))) {
-        sanitizedObj[k] = '[REDACTED]';
+        sanitizedObj[k] = "[REDACTED]";
       } else {
         sanitizedObj[k] = sanitize(v);
       }
@@ -57,7 +61,7 @@ function sanitize(value: unknown): unknown {
     return sanitizedObj;
   }
 
-  return '[REDACTED]';
+  return "[REDACTED]";
 }
 
 export const logger = {

@@ -1,5 +1,5 @@
-import Big from 'big.js';
-import { Transaction, Category, TransactionType } from './types';
+import Big from "big.js";
+import { Transaction, Category, TransactionType } from "./types";
 
 export interface CategoryTotal {
   id: string;
@@ -33,10 +33,10 @@ export function toBig(value: string | number | Big): Big {
   if (value instanceof Big) {
     return value;
   }
-  if (typeof value === 'number') {
+  if (typeof value === "number") {
     return new Big(value);
   }
-  const cleanStr = String(value).trim().replace(',', '.');
+  const cleanStr = String(value).trim().replace(",", ".");
   if (!cleanStr || isNaN(Number(cleanStr))) {
     throw new Error(`Invalid monetary value: "${value}"`);
   }
@@ -50,7 +50,7 @@ export function toBig(value: string | number | Big): Big {
  */
 export function validateTransactionInput(
   rawAmount: string | number | Big,
-  type: TransactionType
+  type: TransactionType,
 ): ValidationResult {
   let bigVal: Big;
   try {
@@ -58,22 +58,23 @@ export function validateTransactionInput(
   } catch {
     return {
       valid: false,
-      error: 'Por favor, informe um valor numérico válido.',
+      error: "Por favor, informe um valor numérico válido.",
     };
   }
 
   if (bigVal.eq(0)) {
     return {
       valid: false,
-      error: 'O valor da transação não pode ser zero.',
+      error: "O valor da transação não pode ser zero.",
     };
   }
 
-  if (type === 'income') {
+  if (type === "income") {
     if (bigVal.lt(0)) {
       return {
         valid: false,
-        error: 'Receitas devem ter valor positivo. Valores negativos são rejeitados.',
+        error:
+          "Receitas devem ter valor positivo. Valores negativos são rejeitados.",
       };
     }
     return {
@@ -82,11 +83,12 @@ export function validateTransactionInput(
     };
   }
 
-  if (type === 'expense') {
+  if (type === "expense") {
     if (bigVal.gt(0)) {
       return {
         valid: false,
-        error: 'Despesas devem ter valor negativo (ex: -150,00). Valores positivos são rejeitados.',
+        error:
+          "Despesas devem ter valor negativo (ex: -150,00). Valores positivos são rejeitados.",
       };
     }
     return {
@@ -97,7 +99,7 @@ export function validateTransactionInput(
 
   return {
     valid: false,
-    error: 'Tipo de transação inválido.',
+    error: "Tipo de transação inválido.",
   };
 }
 
@@ -112,7 +114,9 @@ export function getAbsoluteAmount(amount: string | number | Big): Big {
 /**
  * Filters out soft-deleted transactions (Rule 1).
  */
-export function getActiveTransactions(transactions: Transaction[]): Transaction[] {
+export function getActiveTransactions(
+  transactions: Transaction[],
+): Transaction[] {
   return transactions.filter((t) => !t.deleted_at);
 }
 
@@ -125,7 +129,7 @@ export function calculateBalance(transactions: Transaction[]): Big {
 
   for (const t of active) {
     const val = getAbsoluteAmount(t.amount);
-    if (t.type === 'income') {
+    if (t.type === "income") {
       total = total.plus(val);
     } else {
       total = total.minus(val);
@@ -150,7 +154,7 @@ export function calculateFinancialTotals(transactions: Transaction[]): {
 
   for (const t of active) {
     const val = getAbsoluteAmount(t.amount);
-    if (t.type === 'income') {
+    if (t.type === "income") {
       totalIncome = totalIncome.plus(val);
     } else {
       totalExpense = totalExpense.plus(val);
@@ -189,11 +193,14 @@ export function calculateSavingsRate(income: Big, expense: Big): number {
 export function calculateCategoryTotals(
   transactions: Transaction[],
   categories: Category[],
-  typeFilter: TransactionType = 'expense'
+  typeFilter: TransactionType = "expense",
 ): CategoryTotal[] {
   const active = getActiveTransactions(transactions);
   const filtered = active.filter((t) => t.type === typeFilter);
-  const totalSum = filtered.reduce((acc, curr) => acc.plus(getAbsoluteAmount(curr.amount)), new Big(0));
+  const totalSum = filtered.reduce(
+    (acc, curr) => acc.plus(getAbsoluteAmount(curr.amount)),
+    new Big(0),
+  );
 
   const categoryMap = new Map<string, { cat: Category; amount: Big }>();
 
@@ -211,10 +218,10 @@ export function calculateCategoryTotals(
     } else {
       const fallbackCat: Category = {
         id: tx.category_id,
-        name: 'Outros',
+        name: "Outros",
         type: typeFilter,
-        color: '#64748b',
-        icon: 'CreditCard',
+        color: "#64748b",
+        icon: "CreditCard",
       };
       categoryMap.set(tx.category_id, { cat: fallbackCat, amount: amt });
     }
@@ -237,7 +244,9 @@ export function calculateCategoryTotals(
     }
   }
 
-  return result.sort((a, b) => (b.amount.gt(a.amount) ? 1 : b.amount.lt(a.amount) ? -1 : 0));
+  return result.sort((a, b) =>
+    b.amount.gt(a.amount) ? 1 : b.amount.lt(a.amount) ? -1 : 0,
+  );
 }
 
 /**
@@ -245,7 +254,7 @@ export function calculateCategoryTotals(
  */
 export function calculateMonthlyProjection(
   transactions: Transaction[],
-  monthsAhead: number = 1
+  monthsAhead: number = 1,
 ): MonthlyProjection {
   const active = getActiveTransactions(transactions);
   if (active.length === 0) {
@@ -263,12 +272,12 @@ export function calculateMonthlyProjection(
   const monthlySums: { [monthKey: string]: { income: Big; expense: Big } } = {};
 
   for (const tx of active) {
-    const monthKey = tx.date ? tx.date.substring(0, 7) : 'current';
+    const monthKey = tx.date ? tx.date.substring(0, 7) : "current";
     if (!monthlySums[monthKey]) {
       monthlySums[monthKey] = { income: new Big(0), expense: new Big(0) };
     }
     const amt = getAbsoluteAmount(tx.amount);
-    if (tx.type === 'income') {
+    if (tx.type === "income") {
       monthlySums[monthKey].income = monthlySums[monthKey].income.plus(amt);
     } else {
       monthlySums[monthKey].expense = monthlySums[monthKey].expense.plus(amt);
@@ -291,7 +300,10 @@ export function calculateMonthlyProjection(
   const projectedIncome = avgIncome.times(monthsBig);
   const projectedExpense = avgExpense.times(monthsBig);
   const projectedBalance = projectedIncome.minus(projectedExpense);
-  const projectedSavingsRate = calculateSavingsRate(projectedIncome, projectedExpense);
+  const projectedSavingsRate = calculateSavingsRate(
+    projectedIncome,
+    projectedExpense,
+  );
 
   return {
     monthsAhead,
